@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./generated"
+}
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ১. ইউজার ও অর্গানাইজেশন (Multi-Tenant Core)
+// ==========================================
+
+model Organization {
+  id               String          @id @default(uuid())
+  name             String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // ওয়ালেট ও ক্রেডিট লেজার (Payment / Top-up)
+  walletBalance    Decimal         @default(0.00) @db.Decimal(10, 2)
+  bonusCredit      Int             @default(0)
+  permanentCredit  Int             @default(0)
+  dailyQuotaLimit  Int             @default(500) // প্রতিদিনের মেসেজ লিমিট
+
+  // রিলেশনসমূহ
+  users            User[]
+  teamInvites      TeamInvite[]
+  channels         Channel[]
+  products         Product[]
+  orders           Order[]
+  manualDeposits   ManualDeposit[]
+  conversations    Conversation[]
+  developerApiKeys DeveloperApiKey[]
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id             String       @id // Supabase Auth User ID (UUID) এর সাথে সিঙ্ক হবে
+  email          String       @unique
+  name           String?
+  avatarUrl      String?
+  phoneNumber    String?
+  role           UserRole     @default(MEMBER)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // রিলেশন
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model TeamInvite {
+  id             String       @id @default(uuid())
+  email          String
+  role           UserRole     @default(MEMBER)
+  token          String       @unique
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// ২. চ্যানেল ইন্টিগ্রেশন এবং এআই সেটিংস
+// ==========================================
+
+enum PlatformType {
+  WHATSAPP
+  MESSENGER
+  INSTAGRAM
+}
+
+enum ChannelStatus {
+  ACTIVE
+  INACTIVE
+  COMING_SOON
+}
+
+model Channel {
+  id                  String        @id @default(uuid())
+  platform            PlatformType
+  status              ChannelStatus @default(INACTIVE)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // মেটা ক্রেডেনশিয়ালস (Meta API Credentials)
+  pageId              String?       // Messenger/Instagram-এর জন্য
+  pageAccessToken     String?
+  whatsAppPhoneId     String?       // WhatsApp Business API-এর জন্য
+  whatsAppAccountId   String?
+  whatsAppAccessToken String?
+  webhookVerifyToken  String        @default(uuid())
+
+  // রিলেশন
+  organizationId      String
+  organization        Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  aiSettings          AISettings?
+  conversations       Conversation[]
+}
+
+enum AIProvider {
+  GEMINI
+  OPENAI
+  CLAUDE
+  MISTRAL
+  OPENROUTER
+  OLLAMA
+}
+
+model AISettings {
+  id                      String     @id @default(uuid())
+  provider                AIProvider @default(GEMINI)
+  modelName               String     @default("gemini-1.5-flash")
+  customApiKey            String?    // ইউজার যদি নিজস্ব এপিআই কী ব্যবহার করতে চায়
+
+  // প্রম্পট সেটিংস
+  systemPrompt            String     @db.Text
+  imagePrompt             String?    @db.Text
+
+  // রেসপন্স কাস্টমাইজেশন
+  smartReplyDelay         Int        @default(5)     // সেকেন্ডে ডিলে
+  memoryContextLimit      Int        @default(10)    // পূর্ববর্তী কতটি মেসেজ মনে রাখবে
+  creativity              Float      @default(0.7)   // Temperature
+  diversity               Float      @default(0.9)   // Top P
+  
+  // অ্যাডভান্সড ফিচারস
+  semanticCacheEnabled    Boolean    @default(true)
+  semanticCacheThreshold  Float      @default(0.95)
+  embeddingEnabled        Boolean    @default(true)
+  proPlusMode             Boolean    @default(false)
+
+  // নোটিফিকেশন সেটিংস
+  orderEmailNotifications Boolean    @default(false)
+  notificationEmail       String?
+
+  // রিলেশন
+  channelId               String     @unique
+  channel                 Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// ৩. প্রোডাক্ট ইনভেন্টরি ও ভেক্টর সার্চ (RAG)
+// ==========================================
+
+model Product {
+  id                      String       @id @default(uuid())
+  title                   String
+  description             String       @db.Text
+  allowDescriptionInChat  Boolean      @default(true)
+  aiKeywords              String[]     // সার্চিং আরও নিখুঁত করার কাস্টম ট্যাগস
+  isCombo                 Boolean      @default(false)
+  price                   Decimal      @db.Decimal(10, 2)
+  currency                String       @default("BDT")
+  stock                   Int          @default(0)
+  images                  String[]     // ইমেজের CDN ইউআরএল তালিকা
+  videoUrl                String?
+  wooCommerceId           Int?         // উ-কমার্স সিঙ্কের জন্য আইডি
+  isVariable              Boolean      @default(false)
+  visibleOnChannels       String[]     // কোন কোন চ্যানেলে দেখাবে (যেমন: ["WHATSAPP", "MESSENGER"])
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  // ভেক্টর এমবেডিং (Supabase pgvector-এর জন্য)
+  // এটি Prisma-তে সরাসরি সাপোর্টেড নয়, তাই Unsupported ব্যবহার করা হয়েছে
+  embedding               Unsupported("vector(768)")? // OpenAI বা Gemini (768 হলে vector(768) হবে)
+
+  // রিলেশন
+  organizationId          String
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orderItems              OrderItem[]
+}
+
+// ==========================================
+// ৪. ইনবক্স, কনভারসেশন ও মেসেজিং (Realtime)
+// ==========================================
+
+enum ConversationStatus {
+  ACTIVE
+  PAUSED_BY_USER  // হিউম্যান হ্যান্ডওভারের সময় বট পজ হবে
+  ARCHIVED
+}
+
+model Conversation {
+  id             String             @id @default(uuid())
+  customerId     String             // এক্সটার্নাল মেসেঞ্জার/হোয়াটসঅ্যাপ ইউজার আইডি
+  customerName   String?
+  customerPhone  String?
+  summary        String?            @db.Text // এআই জেনারেটেড সামারি
+  tags           String[]           // যেমন: ["Priority", "Risky", "Lead"]
+  status         ConversationStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  // রিলেশন
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channelId      String
+  channel        Channel            @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  messages       Message[]
+  orders         Order[]
+}
+
+enum SenderType {
+  CUSTOMER
+  BOT
+  HUMAN
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  senderType     SenderType
+  content        String       @db.Text
+  imageUrl       String?
+  videoUrl       String?
+  isAiReplied    Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+embedding      Unsupported("vector(768)")?
+  // রিলেশন
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// ৫. অর্ডার ট্র্যাকিং ও ম্যানেজমেন্ট
+// ==========================================
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+model Order {
+  id             String       @id @default(uuid())
+  customerName   String
+  customerPhone  String
+  deliveryAddress String      @db.Text
+  totalAmount    Decimal      @db.Decimal(10, 2)
+  currency       String       @default("BDT")
+  status         OrderStatus  @default(PENDING)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  // রিলেশন
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  items          OrderItem[]
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2)
+
+  // রিলেশন
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// ৬. ম্যানুয়াল পেমেন্ট ডিপোজিট (bKash/Nagad/Rocket)
+// ==========================================
+
+enum DepositMethod {
+  BKASH
+  NAGAD
+  ROCKET
+}
+
+enum DepositStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model ManualDeposit {
+  id             String        @id @default(uuid())
+  method         DepositMethod
+  senderNumber   String
+  transactionId  String        @unique // ট্রানজেকশন আইডি অবশ্যই ইউনিক হতে হবে
+  amount         Decimal       @db.Decimal(10, 2)
+  status         DepositStatus @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // রিলেশন
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// ৭. ডেভেলাপার এপিআই (Developer API Access)
+// ==========================================
+
+model DeveloperApiKey {
+  id             String       @id @default(uuid())
+  name           String       // কী-এর নাম (যেমন: "Internal CRM")
+  key            String       @unique // হ্যাশ করা এপিআই কী
+  createdAt      DateTime     @default(now())
+
+  // রিলেশন
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
