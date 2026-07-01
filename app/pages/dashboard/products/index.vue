@@ -14,33 +14,29 @@ const isWooOpen = ref(false)
 
 onMounted(() => productStore.fetchProducts())
 
-// ── Delete handler ──
 async function handleDelete(id: string, title: string) {
-  const confirmed = confirm(
-    `Delete "${title}"?\n\nThis will also remove its vector embeddings and cannot be undone.`
-  )
-  if (!confirmed) return
-
+  if (!confirm(`Delete "${title}"?\n\nThis will also remove its vector embeddings and cannot be undone.`)) return
   try {
     await productStore.deleteProduct(id)
-    toast.add({
-      title: "Product Deleted",
-      description: `"${title}" was removed from your catalog.`,
-      color: "success",
-      icon: "i-lucide-circle-check"
-    })
+    toast.add({ title: "Product Deleted", description: `"${title}" was removed from your catalog.`, color: "success", icon: "i-lucide-circle-check" })
   } catch (err: unknown) {
-    toast.add({
-      title: "Delete Failed",
-      description: err instanceof Error ? err.message : "Something went wrong.",
-      color: "error",
-      icon: "i-lucide-circle-x"
-    })
+    toast.add({ title: "Delete Failed", description: err instanceof Error ? err.message : "Something went wrong.", color: "error", icon: "i-lucide-circle-x" })
   }
 }
 
+function stripHtml(html: string | null | undefined): string {
+  if (!html) return ""
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 // ── UTable column definitions ──
-// Using h() + resolveComponent() to render Nuxt UI components inside cells.
 const UBadge = resolveComponent("UBadge")
 const UButton = resolveComponent("UButton")
 const UIcon = resolveComponent("UIcon")
@@ -52,20 +48,16 @@ const columns: TableColumn<Product>[] = [
     id: "product",
     header: "Product",
     cell: ({ row }) => {
-      const product = row.original
+      const p = row.original
       return h("div", { class: "flex items-center gap-3" }, [
-        // Thumbnail
-        h(
-          "div",
-          { class: "h-11 w-11 rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden shrink-0 flex items-center justify-center" },
-          product.images?.[0]
-            ? [h("img", { src: product.images[0], alt: product.title, class: "h-full w-full object-cover" })]
+        h("div", { class: "h-11 w-11 rounded-xl border border-neutral-800 bg-neutral-900 overflow-hidden shrink-0 flex items-center justify-center" },
+          p.images?.[0]
+            ? [h("img", { src: p.images[0], alt: p.title, class: "h-full w-full object-cover" })]
             : [h(UIcon, { name: "i-lucide-image", class: "w-5 h-5 text-neutral-600" })]
         ),
-        // Title + description
         h("div", { class: "min-w-0" }, [
-          h("p", { class: "text-sm font-semibold text-neutral-100 truncate max-w-[220px]" }, product.title),
-          h("p", { class: "text-xs text-neutral-500 truncate max-w-[220px] mt-0.5" }, stripHtml(product.description))
+          h("p", { class: "text-sm font-semibold text-neutral-100 truncate max-w-[220px]" }, p.title),
+          h("p", { class: "text-xs text-neutral-500 truncate max-w-[220px] mt-0.5" }, stripHtml(p.description))
         ])
       ])
     },
@@ -76,66 +68,45 @@ const columns: TableColumn<Product>[] = [
     header: "Price",
     cell: ({ row }) =>
       h("span", { class: "text-sm font-semibold text-neutral-200 tabular-nums" },
-        `৳${Number(row.original.price).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-      )
+        `৳${Number(row.original.price).toLocaleString("en-US", { minimumFractionDigits: 2 })}`)
   },
   {
     accessorKey: "stock",
     header: "Stock",
     cell: ({ row }) => {
-      const stock = row.original.stock
-      if (stock === 0) {
-        return h(UBadge, { color: "error", variant: "soft", label: "Out of Stock" })
-      }
-      if (stock < 10) {
-        return h(UBadge, { color: "warning", variant: "soft", label: `Low — ${stock} left` })
-      }
-      return h(UBadge, { color: "success", variant: "soft", label: `In Stock (${stock})` })
+      const s = row.original.stock
+      if (s === 0) return h(UBadge, { color: "error", variant: "soft", label: "Out of Stock" })
+      if (s < 10) return h(UBadge, { color: "warning", variant: "soft", label: `Low — ${s} left` })
+      return h(UBadge, { color: "success", variant: "soft", label: `In Stock (${s})` })
     }
   },
   {
     accessorKey: "wooCommerceId",
     header: "Source",
-    cell: ({ row }) =>
-      row.original.wooCommerceId
-        ? h(UBadge, { color: "info", variant: "soft", leadingIcon: "i-lucide-globe", label: "WooCommerce" })
-        : h(UBadge, { color: "neutral", variant: "soft", leadingIcon: "i-lucide-pencil", label: "Manual" })
+    cell: ({ row }) => row.original.wooCommerceId
+      ? h(UBadge, { color: "info", variant: "soft", leadingIcon: "i-lucide-globe", label: "WooCommerce" })
+      : h(UBadge, { color: "neutral", variant: "soft", leadingIcon: "i-lucide-pencil", label: "Manual" })
   },
   {
     id: "actions",
     header: "",
     cell: ({ row }) =>
       h(UButton, {
-        icon: "i-lucide-trash-2",
-        color: "error",
-        variant: "ghost",
-        size: "sm",
+        icon: "i-lucide-trash-2", color: "error", variant: "ghost", size: "sm",
         ariaLabel: "Delete product",
         onClick: () => handleDelete(row.original.id, row.original.title)
       }),
     meta: { class: { th: "w-12", td: "text-right" } }
   }
 ]
-// ── HTML ট্যাগ রিমুভ করার কাস্টম হেল্পার ফাংশন ──
-function stripHtml(html: string | null | undefined): string {
-  if (!html) return ""
-  return html
-    .replace(/<[^>]*>/g, "") // সব ধরনের HTML ট্যাগ (<...>) মুছে ফেলবে
-    .replace(/&nbsp;/g, " ") // HTML স্পেস ক্যারেক্টার ডিকোড করবে
-    .replace(/&amp;/g, "&") // এন্ড (&) সিম্বল ঠিক করবে
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ") // অতিরিক্ত স্পেসগুলোকে একটি সিঙ্গেল স্পেসে রূপান্তর করবে
-    .trim()
-}
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-4 md:space-y-6">
     <!-- ── Page header ── -->
     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-5 border-b border-neutral-900">
       <div class="space-y-1">
-        <h1 class="text-3xl font-black text-white tracking-tight">
+        <h1 class="text-2xl sm:text-3xl font-black text-white tracking-tight">
           Product Catalog
         </h1>
         <p class="text-neutral-400 text-sm max-w-lg">
@@ -143,20 +114,23 @@ function stripHtml(html: string | null | undefined): string {
         </p>
       </div>
 
-      <div class="flex items-center gap-3 shrink-0">
+      <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 shrink-0">
         <UButton
           leading-icon="i-lucide-refresh-cw"
           color="neutral"
           variant="outline"
           size="lg"
+          block
+          class="sm:w-auto"
           @click="isWooOpen = true"
         >
           Sync WooCommerce
         </UButton>
-
         <UButton
           leading-icon="i-lucide-plus"
           size="lg"
+          block
+          class="sm:w-auto"
           @click="isAddOpen = true"
         >
           Add Product
@@ -179,7 +153,7 @@ function stripHtml(html: string | null | undefined): string {
       <!-- ── Empty state ── -->
       <div
         v-if="productStore.products.length === 0"
-        class="flex flex-col items-center justify-center py-20 bg-neutral-900 border border-neutral-800 rounded-3xl text-center space-y-6"
+        class="flex flex-col items-center justify-center py-14 sm:py-20 bg-neutral-900 border border-neutral-800 rounded-3xl text-center space-y-6 px-6"
       >
         <div class="relative">
           <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-primary/10">
@@ -190,23 +164,22 @@ function stripHtml(html: string | null | undefined): string {
           </div>
           <span class="absolute inset-0 rounded-full bg-primary/10 animate-ping" />
         </div>
-
         <div class="space-y-2 max-w-sm">
           <h2 class="text-xl font-bold text-white">
             Your catalog is empty
           </h2>
           <p class="text-neutral-400 text-sm leading-relaxed">
-            Add products manually or import from WooCommerce to train
-            your AI sales agents.
+            Add products manually or import from WooCommerce to train your AI sales agents.
           </p>
         </div>
-
-        <div class="flex items-center gap-3 pt-2">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <UButton
             leading-icon="i-lucide-refresh-cw"
             color="neutral"
             variant="outline"
             size="lg"
+            block
+            class="sm:w-auto"
             @click="isWooOpen = true"
           >
             Import from WooCommerce
@@ -214,6 +187,8 @@ function stripHtml(html: string | null | undefined): string {
           <UButton
             leading-icon="i-lucide-plus"
             size="lg"
+            block
+            class="sm:w-auto"
             @click="isAddOpen = true"
           >
             Add Your First Product
@@ -221,41 +196,127 @@ function stripHtml(html: string | null | undefined): string {
         </div>
       </div>
 
-      <!-- ── Data table ── -->
-      <div
-        v-else
-        class="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden"
-      >
+      <!-- ── Products view ── -->
+      <template v-else>
         <!-- Row count -->
-        <div class="flex items-center justify-between px-5 py-3.5 border-b border-neutral-800">
-          <p class="text-xs text-neutral-500 font-medium">
-            {{ productStore.products.length }}
-            {{ productStore.products.length === 1 ? 'product' : 'products' }} in catalog
-          </p>
+        <p class="text-xs text-neutral-500 font-medium px-1">
+          {{ productStore.products.length }}
+          {{ productStore.products.length === 1 ? 'product' : 'products' }} in catalog
+        </p>
+
+        <!-- ── Mobile: Card list (below sm) ── -->
+        <div class="flex flex-col gap-3 sm:hidden w-xs">
+          <div
+            v-for="product in productStore.products"
+            :key="product.id"
+            class="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 flex items-start gap-3"
+          >
+            <!-- Thumbnail -->
+            <div class="h-14 w-14 rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden shrink-0 flex items-center justify-center">
+              <img
+                v-if="product.images?.[0]"
+                :src="product.images[0]"
+                :alt="product.title"
+                class="h-full w-full object-cover"
+              >
+              <UIcon
+                v-else
+                name="i-lucide-image"
+                class="w-5 h-5 text-neutral-600"
+              />
+            </div>
+
+            <!-- Info -->
+            <div class="flex-1 min-w-0 space-y-1.5">
+              <p class="text-sm font-bold text-neutral-100 truncate">
+                {{ product.title }}
+              </p>
+              <p class="text-xs text-neutral-500 line-clamp-1">
+                {{ stripHtml(product.description) }}
+              </p>
+
+              <div class="flex items-center gap-2 flex-wrap pt-0.5">
+                <span class="text-sm font-black text-neutral-200 tabular-nums">
+                  ৳{{ Number(product.price).toLocaleString('en-US', { minimumFractionDigits: 2 }) }}
+                </span>
+
+                <!-- ✅ Fixed: use semantic color tokens (error/warning/success/info) -->
+                <UBadge
+                  v-if="product.stock === 0"
+                  color="error"
+                  variant="soft"
+                  label="Out of Stock"
+                  size="sm"
+                />
+                <UBadge
+                  v-else-if="product.stock < 10"
+                  color="warning"
+                  variant="soft"
+                  :label="`Low — ${product.stock} left`"
+                  size="sm"
+                />
+                <UBadge
+                  v-else
+                  color="success"
+                  variant="soft"
+                  :label="`In Stock (${product.stock})`"
+                  size="sm"
+                />
+
+                <UBadge
+                  v-if="product.wooCommerceId"
+                  color="info"
+                  variant="soft"
+                  leading-icon="i-lucide-globe"
+                  label="WooCommerce"
+                  size="sm"
+                />
+                <UBadge
+                  v-else
+                  color="neutral"
+                  variant="soft"
+                  leading-icon="i-lucide-pencil"
+                  label="Manual"
+                  size="sm"
+                />
+              </div>
+            </div>
+
+            <!-- Delete -->
+            <!-- ✅ Fixed: color="error" not color="red" -->
+            <UButton
+              icon="i-lucide-trash-2"
+              color="error"
+              variant="ghost"
+              size="sm"
+              aria-label="Delete product"
+              class="shrink-0"
+              @click="handleDelete(product.id, product.title)"
+            />
+          </div>
         </div>
 
-        <!--
-          UTable:
-            :data    → the reactive products array from Pinia
-            :columns → column definitions using h() for rich cell rendering
-            :loading → shows a built-in loading animation during fetchProducts()
-            sticky   → freezes the header on scroll for long lists
-        -->
-        <UTable
-          :data="productStore.products"
-          :columns="columns"
-          :loading="productStore.isLoading"
-          sticky
-          class="max-h-150"
-          :ui="{
-            thead: 'bg-neutral-900/80',
-            tbody: 'divide-y divide-neutral-800/50',
-            tr: 'hover:bg-neutral-800/30 transition-colors duration-150',
-            th: 'text-xs font-bold uppercase tracking-wider text-neutral-500 py-3.5',
-            td: 'py-3.5 text-sm'
-          }"
-        />
-      </div>
+        <!-- ── Desktop: Table (sm and above) ── -->
+        <div class="hidden sm:block bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden">
+          <!-- ✅ overflow-x-auto confines horizontal scroll to this box only -->
+          <div class="overflow-x-auto">
+            <UTable
+              :data="productStore.products"
+              :columns="columns"
+              :loading="productStore.isLoading"
+              sticky
+              class="max-h-150 min-w-160"
+              :ui="{
+                thead: 'bg-neutral-900/80',
+                tbody: 'divide-y divide-neutral-800/50',
+                tr: 'hover:bg-neutral-800/30 transition-colors duration-150',
+                th: 'text-xs font-bold uppercase tracking-wider text-neutral-500 py-3.5',
+                td: 'py-3.5 text-sm'
+              }"
+            />
+          </div>
+        </div>
+      </template>
     </template>
 
     <!-- ── Mounted overlays ── -->

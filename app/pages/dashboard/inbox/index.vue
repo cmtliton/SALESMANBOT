@@ -1,5 +1,7 @@
 <!-- app/pages/dashboard/inbox/index.vue -->
 <script setup lang="ts">
+import { onMounted } from "vue"
+
 definePageMeta({
   layout: "dashboard"
 })
@@ -23,27 +25,25 @@ const handleCreateOrder = () => {
 
 <template>
   <!--
-    3-column responsive grid.
-    h-[calc(100vh-theme(spacing.24))] fills the viewport minus the
-    dashboard navbar height (assumed 6rem / 24 spacing units).
-    overflow-hidden prevents double scrollbars — each column manages
-    its own internal scroll independently.
+    ৩-কলাম রেসপন্সিভ গ্রিড কন্টেইনার।
+    মোবাইলে: h-auto (স্বাভাবিক ওপর-নিচে স্ক্রল হবে) এবং overflow-y-auto
+    ডেস্কটপে (lg): ফিক্সড ভিউপোর্ট হাইট এবং overflow-hidden (ডাবল স্ক্রলবার প্রতিরোধ করবে)
   -->
   <div
-    class="grid grid-cols-1 lg:grid-cols-4 gap-4 h-[calc(100vh-(--spacing(24)))] overflow-hidden"
+    class="grid grid-cols-1 lg:grid-cols-4 gap-4 h-auto lg:h-[calc(100vh-(--spacing(24)))] overflow-y-auto lg:overflow-hidden"
   >
-    <!-- Column 1 — Conversation list (1 / 4 columns) -->
-    <div class="lg:col-span-1 min-h-0 overflow-hidden">
+    <!-- কলাম ১ — Conversation list (মোবাইলে ৩৫০px হাইট, ডেস্কটপে ফুল হাইট) -->
+    <div class="lg:col-span-1 h-87.5 lg:h-full min-h-0 overflow-hidden shrink-0">
       <InboxConversationList />
     </div>
 
-    <!-- Column 2 — Live chat window (2 / 4 columns) -->
-    <div class="lg:col-span-2 min-h-0 overflow-hidden">
+    <!-- কলাম ২ — Live chat window (মোবাইলে ৫০০px হাইট, ডেস্কটপে ফুল হাইট) -->
+    <div class="lg:col-span-2 h-125 lg:h-full min-h-0 overflow-hidden shrink-0">
       <InboxChatWindow />
     </div>
 
-    <!-- Column 3 — Customer profile + AI summary (1 / 4 columns) -->
-    <div class="lg:col-span-1 min-h-0 overflow-hidden">
+    <!-- কলাম ৩ — Customer profile + AI summary (মোবাইলে অটো হাইট, ডেস্কটপে ফুল হাইট) -->
+    <div class="lg:col-span-1 h-auto lg:h-full min-h-0 overflow-hidden shrink-0">
       <InboxCustomerProfile @create-order="handleCreateOrder" />
     </div>
   </div>
